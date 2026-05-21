@@ -70,26 +70,31 @@ if st.session_state.labels:
     
     pdf_buffer = io.BytesIO()
     
-    # Okraje stránky dáme minimální (cca 5 mm), aby zbylo maximum místa na výšku
-    margin = 15
+    # --- 🖨️ KALIBRACE ROZMĚRŮ (Změň hodnoty podle potřeby) ---
+    # Reportlab používá body (1 mm = cca 2.834 bodu)
+    # Pokud se tisk ke konci stránky posouvá nahoru, znamená to, že výška řádku (ROW_HEIGHT) je v reálu o něco větší.
+    
+    PAGE_TOP_MARGIN = 12   # Horní okraj archu A4
+    PAGE_LEFT_MARGIN = 12  # Levý okraj archu A4
+    
+    ROW_HEIGHT = 111.5     # Výška jednoho štítku (uprav z 112 na 111.5 pro kompenzaci kumulativního posunu)
+    COL_WIDTH = 282.0      # Šířka jednoho štítku
+    
     doc = SimpleDocTemplate(
         pdf_buffer, 
         pagesize=A4_SIZE,
-        leftMargin=margin, 
-        rightMargin=margin, 
-        topMargin=margin, 
-        bottomMargin=margin
+        leftMargin=PAGE_LEFT_MARGIN, 
+        rightMargin=PAGE_LEFT_MARGIN, 
+        topMargin=PAGE_TOP_MARGIN, 
+        bottomMargin=PAGE_TOP_MARGIN
     )
     
     styles = getSampleStyleSheet()
     
-    # --- KOREKCE VELIKOSTÍ PÍSMA A MEZER ---
-    # Příjemce je opět větší a výrazný
-    style_name = ParagraphStyle('Name', parent=styles['Normal'], fontSize=14, leading=16, fontName=FONT_BOLD)
+    # --- JEŠTĚ VĚTŠÍ PŘÍJEMCE ---
+    style_name = ParagraphStyle('Name', parent=styles['Normal'], fontSize=16, leading=19, fontName=FONT_BOLD)
     style_order = ParagraphStyle('Order', parent=styles['Normal'], fontSize=10, leading=12, fontName=FONT_REGULAR)
     style_note = ParagraphStyle('Note', parent=styles['Normal'], fontSize=9, leading=11, fontName=FONT_REGULAR, textColor=colors.HexColor('#555555'))
-    
-    # Balík zůstává obří
     style_pkg = ParagraphStyle('Pkg', parent=styles['Normal'], fontSize=20, leading=22, fontName=FONT_BOLD, alignment=2)
     
     story = []
@@ -103,7 +108,7 @@ if st.session_state.labels:
             Paragraph(f"<b>Objednávka:</b> {label['order_num']}", style_order),
             Spacer(1, 2),
             Paragraph(f"<b>Poznámka:</b> {label['note']}" if label['note'] else "", style_note),
-            Spacer(1, 4), # Menší mezera, aby text netlačil buňku dolů
+            Spacer(1, 4), 
             Paragraph(label['package_info'], style_pkg)
         ]
         
@@ -118,26 +123,17 @@ if st.session_state.labels:
         grid_data.append(current_row)
         
     if grid_data:
-        # Šířka sloupce
-        col_width = (595.27 - (2 * margin)) / 2
+        row_heights = [ROW_HEIGHT] * len(grid_data)
         
-        # --- KLÍČOVÁ OPRAVA: Bezpečná výška řádku ---
-        # Místo matematického maxima (841 / 7) dáme natvrdo pevnou výšku 112 bodů.
-        # Tím se 7 řádků (7 * 112 = 784 bodů) zaručeně vejde do tisknutelné oblasti A4 (841 bodů).
-        row_height = 112
+        t = Table(grid_data, colWidths=[COL_WIDTH, COL_WIDTH], rowHeights=row_heights)
         
-        row_heights = [row_height] * len(grid_data)
-        
-        t = Table(grid_data, colWidths=[col_width, col_width], rowHeights=row_heights)
-        
-        # Padding (vnitřní okraj) jsme dali na minimum (5 bodů), aby se obsah uvnitř buňky netísnil
         t.setStyle(TableStyle([
-            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#999999')),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CCCCCC')), # Světlejší mřížka, aby nerušila tisk
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
             ('TOPPADDING', (0,0), (-1,-1), 6),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 6),
-            ('LEFTPADDING', (0,0), (-1,-1), 8),
-            ('RIGHTPADDING', (0,0), (-1,-1), 8),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+            ('LEFTPADDING', (0,0), (-1,-1), 10),
+            ('RIGHTPADDING', (0,0), (-1,-1), 10),
         ]))
         
         story.append(t)
@@ -147,7 +143,7 @@ if st.session_state.labels:
         st.download_button(
             label="📥 Stáhnout PDF se štítky",
             data=pdf_data,
-            file_name="stitky_2x7.pdf",
+            file_name="stitky_kalibrace.pdf",
             mime="application/pdf"
         )
 else:
