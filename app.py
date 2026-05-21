@@ -20,7 +20,6 @@ except Exception as e:
 FONT_REGULAR = 'ArialCustom' if FONT_REGISTRATION_SUCCESS else 'Helvetica'
 FONT_BOLD = 'ArialCustom-Bold' if FONT_REGISTRATION_SUCCESS else 'Helvetica-Bold'
 
-# Přesné rozměry A4 v bodech
 A4_SIZE = (595.27, 841.89)
 
 st.set_page_config(page_title="Generátor štítků", layout="wide")
@@ -71,8 +70,8 @@ if st.session_state.labels:
     
     pdf_buffer = io.BytesIO()
     
-    # Zmenšíme okraj stránky na 10 bodů (cca 3.5 mm), abychom dali tabulce více místa pro 7 řádků
-    margin = 10
+    # Okraje stránky dáme minimální (cca 5 mm), aby zbylo maximum místa na výšku
+    margin = 15
     doc = SimpleDocTemplate(
         pdf_buffer, 
         pagesize=A4_SIZE,
@@ -84,13 +83,13 @@ if st.session_state.labels:
     
     styles = getSampleStyleSheet()
     
-    # --- ÚPRAVA VELIKOSTÍ PÍSMA ---
-    # Jméno a objednávka jsou menší, aby nepřetékaly z okénka
-    style_name = ParagraphStyle('Name', parent=styles['Normal'], fontSize=11, leading=13, fontName=FONT_BOLD)
+    # --- KOREKCE VELIKOSTÍ PÍSMA A MEZER ---
+    # Příjemce je opět větší a výrazný
+    style_name = ParagraphStyle('Name', parent=styles['Normal'], fontSize=14, leading=16, fontName=FONT_BOLD)
     style_order = ParagraphStyle('Order', parent=styles['Normal'], fontSize=10, leading=12, fontName=FONT_REGULAR)
     style_note = ParagraphStyle('Note', parent=styles['Normal'], fontSize=9, leading=11, fontName=FONT_REGULAR, textColor=colors.HexColor('#555555'))
     
-    # Informace o balíku je obrovská a výrazná (velikost 20)
+    # Balík zůstává obří
     style_pkg = ParagraphStyle('Pkg', parent=styles['Normal'], fontSize=20, leading=22, fontName=FONT_BOLD, alignment=2)
     
     story = []
@@ -100,11 +99,11 @@ if st.session_state.labels:
     for label in st.session_state.labels:
         label_content = [
             Paragraph(f"<b>Příjemce:</b> {label['name']}", style_name),
-            Spacer(1, 3),
+            Spacer(1, 2),
             Paragraph(f"<b>Objednávka:</b> {label['order_num']}", style_order),
-            Spacer(1, 3),
+            Spacer(1, 2),
             Paragraph(f"<b>Poznámka:</b> {label['note']}" if label['note'] else "", style_note),
-            Spacer(1, 10), # Mezera před velkým číslem balíku
+            Spacer(1, 4), # Menší mezera, aby text netlačil buňku dolů
             Paragraph(label['package_info'], style_pkg)
         ]
         
@@ -119,22 +118,26 @@ if st.session_state.labels:
         grid_data.append(current_row)
         
     if grid_data:
-        # Výpočet rozměrů buněk tak, aby se jich na výšku vešlo přesně 7
+        # Šířka sloupce
         col_width = (595.27 - (2 * margin)) / 2
-        row_height = (841.89 - (2 * margin)) / 7
+        
+        # --- KLÍČOVÁ OPRAVA: Bezpečná výška řádku ---
+        # Místo matematického maxima (841 / 7) dáme natvrdo pevnou výšku 112 bodů.
+        # Tím se 7 řádků (7 * 112 = 784 bodů) zaručeně vejde do tisknutelné oblasti A4 (841 bodů).
+        row_height = 112
         
         row_heights = [row_height] * len(grid_data)
         
         t = Table(grid_data, colWidths=[col_width, col_width], rowHeights=row_heights)
         
-        # Snížili jsme TOP a BOTTOM padding na 8, aby text netlačil řádek na další stránku
+        # Padding (vnitřní okraj) jsme dali na minimum (5 bodů), aby se obsah uvnitř buňky netísnil
         t.setStyle(TableStyle([
             ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#999999')),
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
-            ('TOPPADDING', (0,0), (-1,-1), 8),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 8),
-            ('LEFTPADDING', (0,0), (-1,-1), 10),
-            ('RIGHTPADDING', (0,0), (-1,-1), 10),
+            ('TOPPADDING', (0,0), (-1,-1), 6),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+            ('LEFTPADDING', (0,0), (-1,-1), 8),
+            ('RIGHTPADDING', (0,0), (-1,-1), 8),
         ]))
         
         story.append(t)
@@ -144,7 +147,7 @@ if st.session_state.labels:
         st.download_button(
             label="📥 Stáhnout PDF se štítky",
             data=pdf_data,
-            file_name="stitky_opraveno.pdf",
+            file_name="stitky_2x7.pdf",
             mime="application/pdf"
         )
 else:
