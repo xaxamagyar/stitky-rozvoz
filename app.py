@@ -2,15 +2,37 @@ import streamlit as st
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 import io
+import os
 
-# Ruční definice rozměrů A4 v bodech (odpadá problematický import)
+# --- REGISTRACE ČESKÉHO FONTU (ARIAL) ---
+# Ošetření, aby aplikace nespadla, pokud by soubory na GitHubu chyběly
+FONT_REGISTRATION_SUCCESS = False
+try:
+    # Registrujeme normální a tučnou verzi Arialu, které jsi nahrál do repozitáře
+    if os.path.exists("ARIAL.TTF") and os.path.exists("ARIALBD.TTF"):
+        pdfmetrics.registerFont(TTFont('ArialCustom', 'ARIAL.TTF'))
+        pdfmetrics.registerFont(TTFont('ArialCustom-Bold', 'ARIALBD.TTF'))
+        FONT_REGISTRATION_SUCCESS = True
+except Exception as e:
+    st.error(f"Nepodařilo se načíst nahrané fonty Arial: {e}")
+
+# Definice názvů fontů podle toho, zda se registrace povedla
+FONT_REGULAR = 'ArialCustom' if FONT_REGISTRATION_SUCCESS else 'Helvetica'
+FONT_BOLD = 'ArialCustom-Bold' if FONT_REGISTRATION_SUCCESS else 'Helvetica-Bold'
+
+# Ruční definice rozměrů A4 v bodech
 A4_SIZE = (595.27, 841.89)
 
 st.set_page_config(page_title="Generátor štítků", layout="wide")
 
 st.title("📦 Generátor balíkových štítků (A4 - 2x7)")
 st.write("Zadejte údaje, přidejte balíky do seznamu a následně vygenerujte PDF pro tisk.")
+
+if not FONT_REGISTRATION_SUCCESS:
+    st.warning("⚠️ V aplikaci běžící na cloudu nebyly detekovány soubory ARIAL.TTF a ARIALBD.TTF. Text bude v základním fontu a může mít problém s češtinou. Ujistěte se, že jsou nahrány ve stejné složce na GitHubu jako app.py.")
 
 # Inicializace stavu aplikace (paměť pro uložené štítky)
 if "labels" not in st.session_state:
@@ -58,7 +80,6 @@ if st.session_state.labels:
     pdf_buffer = io.BytesIO()
     
     margin = 15
-    # Použití ručně definované velikosti stránky A4_SIZE
     doc = SimpleDocTemplate(
         pdf_buffer, 
         pagesize=A4_SIZE,
@@ -69,23 +90,26 @@ if st.session_state.labels:
     )
     
     styles = getSampleStyleSheet()
-    style_name = ParagraphStyle('Name', parent=styles['Normal'], fontSize=12, leading=14, fontName="Helvetica-Bold")
-    style_order = ParagraphStyle('Order', parent=styles['Normal'], fontSize=10, leading=12, fontName="Helvetica")
-    style_note = ParagraphStyle('Note', parent=styles['Normal'], fontSize=8, leading=10, fontName="Helvetica-Oblique", textColor=colors.gray)
-    style_pkg = ParagraphStyle('Pkg', parent=styles['Normal'], fontSize=9, leading=11, fontName="Helvetica", alignment=2)
+    
+    # --- VÝRAZNĚ VĚTŠÍ A UPRAVENÉ STYLY PRO TEXT ---
+    style_name = ParagraphStyle('Name', parent=styles['Normal'], fontSize=16, leading=19, fontName=FONT_BOLD)
+    style_order = ParagraphStyle('Order', parent=styles['Normal'], fontSize=13, leading=16, fontName=FONT_REGULAR)
+    style_note = ParagraphStyle('Note', parent=styles['Normal'], fontSize=11, leading=14, fontName=FONT_REGULAR, textColor=colors.HexColor('#444444'))
+    style_pkg = ParagraphStyle('Pkg', parent=styles['Normal'], fontSize=12, leading=14, fontName=FONT_BOLD, alignment=2) # Doprava
     
     story = []
     grid_data = []
     current_row = []
     
     for label in st.session_state.labels:
+        # Sestavení obsahu buňky s většími rozestupy (Spacer)
         label_content = [
-            Paragraph(f"<b>Příjemce:</b> {label['name']}", style_name),
-            Spacer(1, 4),
-            Paragraph(f"<b>Objednávka:</b> {label['order_num']}", style_order),
-            Spacer(1, 4),
-            Paragraph(f"<b>Poznámka:</b> {label['note']}", style_note),
+            Paragraph(f"<b>PŘÍJEMCE:</b><br/>{label['name']}", style_name),
             Spacer(1, 8),
+            Paragraph(f"<b>Objednávka:</b> {label['order_num']}", style_order),
+            Spacer(1, 6),
+            Paragraph(f"<b>Poznámka:</b> {label['note']}" if label['note'] else "", style_note),
+            Spacer(1, 12),
             Paragraph(label['package_info'], style_pkg)
         ]
         
@@ -107,13 +131,14 @@ if st.session_state.labels:
         
         t = Table(grid_data, colWidths=[col_width, col_width], rowHeights=row_heights)
         
+        # Polstrování (PADDING) zvětšeno na 14 bodů pro lepší optický prostor uvnitř velkého štítku
         t.setStyle(TableStyle([
-            ('GRID', (0,0), (-1,-1), 0.5, colors.lightgrey),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#999999')), # Trochu tmavší mřížka pro snadnější stříhání
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
-            ('TOPPADDING', (0,0), (-1,-1), 10),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 10),
-            ('LEFTPADDING', (0,0), (-1,-1), 10),
-            ('RIGHTPADDING', (0,0), (-1,-1), 10),
+            ('TOPPADDING', (0,0), (-1,-1), 14),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 14),
+            ('LEFTPADDING', (0,0), (-1,-1), 14),
+            ('RIGHTPADDING', (0,0), (-1,-1), 14),
         ]))
         
         story.append(t)
@@ -121,9 +146,9 @@ if st.session_state.labels:
         
         pdf_data = pdf_buffer.getvalue()
         st.download_button(
-            label="📥 Stáhnout PDF se štítky",
+            label="📥 Stáhnout PDF s velkými štítky",
             data=pdf_data,
-            file_name="stitky.pdf",
+            file_name="stitky_velke.pdf",
             mime="application/pdf"
         )
 else:
