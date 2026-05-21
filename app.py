@@ -70,32 +70,28 @@ if st.session_state.labels:
     
     pdf_buffer = io.BytesIO()
     
-    # --- 🖨️ KALIBRACE ROZMĚRŮ (Změň hodnoty podle potřeby) ---
-    # Reportlab používá body (1 mm = cca 2.834 bodu)
-    # Pokud se tisk ke konci stránky posouvá nahoru, znamená to, že výška řádku (ROW_HEIGHT) je v reálu o něco větší.
+    # --- 📐 MATEMATICKY PŘESNÉ ROZMĚRY PRO BEZOKRAJOVOU A4 ---
+    PAGE_MARGIN = 0  # Štítky jsou od kraje ke kraje, okraj musí být nula
     
-    PAGE_TOP_MARGIN = 12   # Horní okraj archu A4
-    PAGE_LEFT_MARGIN = 12  # Levý okraj archu A4
-    
-    ROW_HEIGHT = 111.5     # Výška jednoho štítku (uprav z 112 na 111.5 pro kompenzaci kumulativního posunu)
-    COL_WIDTH = 282.0      # Šířka jednoho štítku
+    COL_WIDTH = 595.27 / 2  # Přesně polovina šířky A4 (297.635)
+    ROW_HEIGHT = 841.89 / 7  # Přesně sedmina výšky A4 (120.27)
     
     doc = SimpleDocTemplate(
         pdf_buffer, 
         pagesize=A4_SIZE,
-        leftMargin=PAGE_LEFT_MARGIN, 
-        rightMargin=PAGE_LEFT_MARGIN, 
-        topMargin=PAGE_TOP_MARGIN, 
-        bottomMargin=PAGE_TOP_MARGIN
+        leftMargin=PAGE_MARGIN, 
+        rightMargin=PAGE_MARGIN, 
+        topMargin=PAGE_MARGIN, 
+        bottomMargin=PAGE_MARGIN
     )
     
     styles = getSampleStyleSheet()
     
-    # --- JEŠTĚ VĚTŠÍ PŘÍJEMCE ---
+    # --- VELIKOSTI PÍSMA ---
     style_name = ParagraphStyle('Name', parent=styles['Normal'], fontSize=16, leading=19, fontName=FONT_BOLD)
-    style_order = ParagraphStyle('Order', parent=styles['Normal'], fontSize=10, leading=12, fontName=FONT_REGULAR)
-    style_note = ParagraphStyle('Note', parent=styles['Normal'], fontSize=9, leading=11, fontName=FONT_REGULAR, textColor=colors.HexColor('#555555'))
-    style_pkg = ParagraphStyle('Pkg', parent=styles['Normal'], fontSize=20, leading=22, fontName=FONT_BOLD, alignment=2)
+    style_order = ParagraphStyle('Order', parent=styles['Normal'], fontSize=11, leading=13, fontName=FONT_REGULAR)
+    style_note = ParagraphStyle('Note', parent=styles['Normal'], fontSize=10, leading=12, fontName=FONT_REGULAR, textColor=colors.HexColor('#444444'))
+    style_pkg = ParagraphStyle('Pkg', parent=styles['Normal'], fontSize=22, leading=24, fontName=FONT_BOLD, alignment=2)
     
     story = []
     grid_data = []
@@ -104,11 +100,11 @@ if st.session_state.labels:
     for label in st.session_state.labels:
         label_content = [
             Paragraph(f"<b>Příjemce:</b> {label['name']}", style_name),
-            Spacer(1, 2),
+            Spacer(1, 4),
             Paragraph(f"<b>Objednávka:</b> {label['order_num']}", style_order),
-            Spacer(1, 2),
+            Spacer(1, 4),
             Paragraph(f"<b>Poznámka:</b> {label['note']}" if label['note'] else "", style_note),
-            Spacer(1, 4), 
+            Spacer(1, 8), 
             Paragraph(label['package_info'], style_pkg)
         ]
         
@@ -127,13 +123,14 @@ if st.session_state.labels:
         
         t = Table(grid_data, colWidths=[COL_WIDTH, COL_WIDTH], rowHeights=row_heights)
         
+        # Přidali jsme mírné vnitřní odsazení (PADDING), aby text nebyl nalepený úplně na fyzickém kraji papíru
         t.setStyle(TableStyle([
-            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CCCCCC')), # Světlejší mřížka, aby nerušila tisk
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CCCCCC')), 
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
-            ('TOPPADDING', (0,0), (-1,-1), 6),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 4),
-            ('LEFTPADDING', (0,0), (-1,-1), 10),
-            ('RIGHTPADDING', (0,0), (-1,-1), 10),
+            ('TOPPADDING', (0,0), (-1,-1), 12),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 10),
+            ('LEFTPADDING', (0,0), (-1,-1), 15),
+            ('RIGHTPADDING', (0,0), (-1,-1), 15),
         ]))
         
         story.append(t)
@@ -143,7 +140,7 @@ if st.session_state.labels:
         st.download_button(
             label="📥 Stáhnout PDF se štítky",
             data=pdf_data,
-            file_name="stitky_kalibrace.pdf",
+            file_name="stitky_bezokrajove.pdf",
             mime="application/pdf"
         )
 else:
