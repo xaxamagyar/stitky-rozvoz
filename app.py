@@ -8,10 +8,8 @@ import io
 import os
 
 # --- REGISTRACE ČESKÉHO FONTU (ARIAL) ---
-# Ošetření, aby aplikace nespadla, pokud by soubory na GitHubu chyběly
 FONT_REGISTRATION_SUCCESS = False
 try:
-    # Registrujeme normální a tučnou verzi Arialu, které jsi nahrál do repozitáře
     if os.path.exists("ARIAL.TTF") and os.path.exists("ARIALBD.TTF"):
         pdfmetrics.registerFont(TTFont('ArialCustom', 'ARIAL.TTF'))
         pdfmetrics.registerFont(TTFont('ArialCustom-Bold', 'ARIALBD.TTF'))
@@ -19,11 +17,10 @@ try:
 except Exception as e:
     st.error(f"Nepodařilo se načíst nahrané fonty Arial: {e}")
 
-# Definice názvů fontů podle toho, zda se registrace povedla
 FONT_REGULAR = 'ArialCustom' if FONT_REGISTRATION_SUCCESS else 'Helvetica'
 FONT_BOLD = 'ArialCustom-Bold' if FONT_REGISTRATION_SUCCESS else 'Helvetica-Bold'
 
-# Ruční definice rozměrů A4 v bodech
+# Přesné rozměry A4 v bodech
 A4_SIZE = (595.27, 841.89)
 
 st.set_page_config(page_title="Generátor štítků", layout="wide")
@@ -31,10 +28,6 @@ st.set_page_config(page_title="Generátor štítků", layout="wide")
 st.title("📦 Generátor balíkových štítků (A4 - 2x7)")
 st.write("Zadejte údaje, přidejte balíky do seznamu a následně vygenerujte PDF pro tisk.")
 
-if not FONT_REGISTRATION_SUCCESS:
-    st.warning("⚠️ V aplikaci běžící na cloudu nebyly detekovány soubory ARIAL.TTF a ARIALBD.TTF. Text bude v základním fontu a může mít problém s češtinou. Ujistěte se, že jsou nahrány ve stejné složce na GitHubu jako app.py.")
-
-# Inicializace stavu aplikace (paměť pro uložené štítky)
 if "labels" not in st.session_state:
     st.session_state.labels = []
 
@@ -58,7 +51,7 @@ if submit:
                 "name": name,
                 "order_num": order_num,
                 "note": note,
-                "package_info": f"Balík: {i}/{count}" if count > 1 else "Balík: 1/1"
+                "package_info": f"BALÍK: {i}/{count}" if count > 1 else "BALÍK: 1/1"
             })
         st.success(f"Přidáno {count} štítků.")
     else:
@@ -67,7 +60,6 @@ if submit:
 # --- PŘEHLED ZADANÝCH ŠTÍTKŮ ---
 if st.session_state.labels:
     st.subheader(f"📋 Seznam štítků k tisku ({len(st.session_state.labels)} ks)")
-    
     st.dataframe(st.session_state.labels)
     
     if st.button("🗑️ Vymazat celý seznam"):
@@ -79,7 +71,8 @@ if st.session_state.labels:
     
     pdf_buffer = io.BytesIO()
     
-    margin = 15
+    # Zmenšíme okraj stránky na 10 bodů (cca 3.5 mm), abychom dali tabulce více místa pro 7 řádků
+    margin = 10
     doc = SimpleDocTemplate(
         pdf_buffer, 
         pagesize=A4_SIZE,
@@ -91,25 +84,27 @@ if st.session_state.labels:
     
     styles = getSampleStyleSheet()
     
-    # --- VÝRAZNĚ VĚTŠÍ A UPRAVENÉ STYLY PRO TEXT ---
-    style_name = ParagraphStyle('Name', parent=styles['Normal'], fontSize=16, leading=19, fontName=FONT_BOLD)
-    style_order = ParagraphStyle('Order', parent=styles['Normal'], fontSize=13, leading=16, fontName=FONT_REGULAR)
-    style_note = ParagraphStyle('Note', parent=styles['Normal'], fontSize=11, leading=14, fontName=FONT_REGULAR, textColor=colors.HexColor('#444444'))
-    style_pkg = ParagraphStyle('Pkg', parent=styles['Normal'], fontSize=12, leading=14, fontName=FONT_BOLD, alignment=2) # Doprava
+    # --- ÚPRAVA VELIKOSTÍ PÍSMA ---
+    # Jméno a objednávka jsou menší, aby nepřetékaly z okénka
+    style_name = ParagraphStyle('Name', parent=styles['Normal'], fontSize=11, leading=13, fontName=FONT_BOLD)
+    style_order = ParagraphStyle('Order', parent=styles['Normal'], fontSize=10, leading=12, fontName=FONT_REGULAR)
+    style_note = ParagraphStyle('Note', parent=styles['Normal'], fontSize=9, leading=11, fontName=FONT_REGULAR, textColor=colors.HexColor('#555555'))
+    
+    # Informace o balíku je obrovská a výrazná (velikost 20)
+    style_pkg = ParagraphStyle('Pkg', parent=styles['Normal'], fontSize=20, leading=22, fontName=FONT_BOLD, alignment=2)
     
     story = []
     grid_data = []
     current_row = []
     
     for label in st.session_state.labels:
-        # Sestavení obsahu buňky s většími rozestupy (Spacer)
         label_content = [
-            Paragraph(f"<b>PŘÍJEMCE:</b><br/>{label['name']}", style_name),
-            Spacer(1, 8),
+            Paragraph(f"<b>Příjemce:</b> {label['name']}", style_name),
+            Spacer(1, 3),
             Paragraph(f"<b>Objednávka:</b> {label['order_num']}", style_order),
-            Spacer(1, 6),
+            Spacer(1, 3),
             Paragraph(f"<b>Poznámka:</b> {label['note']}" if label['note'] else "", style_note),
-            Spacer(1, 12),
+            Spacer(1, 10), # Mezera před velkým číslem balíku
             Paragraph(label['package_info'], style_pkg)
         ]
         
@@ -124,6 +119,7 @@ if st.session_state.labels:
         grid_data.append(current_row)
         
     if grid_data:
+        # Výpočet rozměrů buněk tak, aby se jich na výšku vešlo přesně 7
         col_width = (595.27 - (2 * margin)) / 2
         row_height = (841.89 - (2 * margin)) / 7
         
@@ -131,14 +127,14 @@ if st.session_state.labels:
         
         t = Table(grid_data, colWidths=[col_width, col_width], rowHeights=row_heights)
         
-        # Polstrování (PADDING) zvětšeno na 14 bodů pro lepší optický prostor uvnitř velkého štítku
+        # Snížili jsme TOP a BOTTOM padding na 8, aby text netlačil řádek na další stránku
         t.setStyle(TableStyle([
-            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#999999')), # Trochu tmavší mřížka pro snadnější stříhání
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#999999')),
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
-            ('TOPPADDING', (0,0), (-1,-1), 14),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 14),
-            ('LEFTPADDING', (0,0), (-1,-1), 14),
-            ('RIGHTPADDING', (0,0), (-1,-1), 14),
+            ('TOPPADDING', (0,0), (-1,-1), 8),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+            ('LEFTPADDING', (0,0), (-1,-1), 10),
+            ('RIGHTPADDING', (0,0), (-1,-1), 10),
         ]))
         
         story.append(t)
@@ -146,9 +142,9 @@ if st.session_state.labels:
         
         pdf_data = pdf_buffer.getvalue()
         st.download_button(
-            label="📥 Stáhnout PDF s velkými štítky",
+            label="📥 Stáhnout PDF se štítky",
             data=pdf_data,
-            file_name="stitky_velke.pdf",
+            file_name="stitky_opraveno.pdf",
             mime="application/pdf"
         )
 else:
