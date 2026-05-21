@@ -70,15 +70,8 @@ if st.session_state.labels:
     
     pdf_buffer = io.BytesIO()
     
-    # Okraje stránky necháme na 0
     PAGE_MARGIN = 0  
-    
-    # --- 🛠️ FIX PRO 7 ŘÁDKŮ NA STRÁNKU ---
-    # Šířku držíme přesně na polovinu A4
     COL_WIDTH = 595.27 / 2  
-    
-    # Výšku řádku uměle snížíme o necelé 3 body z matematického maxima (ze 120.27 na 117.5).
-    # Tím zaručíme, že ReportLab do spodního okraje nenarazí a vykreslí všech 7 řádků na jednu stranu.
     ROW_HEIGHT = 117.5  
     
     doc = SimpleDocTemplate(
@@ -92,7 +85,6 @@ if st.session_state.labels:
     
     styles = getSampleStyleSheet()
     
-    # Příjemce je velký (16)
     style_name = ParagraphStyle('Name', parent=styles['Normal'], fontSize=16, leading=19, fontName=FONT_BOLD)
     style_order = ParagraphStyle('Order', parent=styles['Normal'], fontSize=11, leading=13, fontName=FONT_REGULAR)
     style_note = ParagraphStyle('Note', parent=styles['Normal'], fontSize=10, leading=12, fontName=FONT_REGULAR, textColor=colors.HexColor('#444444'))
@@ -109,7 +101,7 @@ if st.session_state.labels:
             Paragraph(f"<b>Objednávka:</b> {label['order_num']}", style_order),
             Spacer(1, 2),
             Paragraph(f"<b>Poznámka:</b> {label['note']}" if label['note'] else "", style_note),
-            Spacer(1, 4), # Minimální mezera před číslem balíku
+            Spacer(1, 4), 
             Paragraph(label['package_info'], style_pkg)
         ]
         
@@ -128,14 +120,20 @@ if st.session_state.labels:
         
         t = Table(grid_data, colWidths=[COL_WIDTH, COL_WIDTH], rowHeights=row_heights)
         
-        # Snížili jsme TOPPADDING a BOTTOMPADDING na 5 bodů, aby měl text uvnitř spoustu místa
+        # --- 🛠️ CHYTRÉ POLSTROVÁNÍ PROTI OŘEZU TISKÁRNOU ---
         t.setStyle(TableStyle([
             ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CCCCCC')), 
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
             ('TOPPADDING', (0,0), (-1,-1), 5),
             ('BOTTOMPADDING', (0,0), (-1,-1), 5),
-            ('LEFTPADDING', (0,0), (-1,-1), 12),
-            ('RIGHTPADDING', (0,0), (-1,-1), 12),
+            
+            # Levý sloupec (index 0): velký odstup zleva (18), standardní zprava (10)
+            ('LEFTPADDING', (0,0), (0,-1), 18),
+            ('RIGHTPADDING', (0,0), (0,-1), 10),
+            
+            # Pravý sloupec (index 1): standardní zleva (10), velký odstup zprava (18) proti ořezu
+            ('LEFTPADDING', (1,0), (1,-1), 10),
+            ('RIGHTPADDING', (1,0), (1,-1), 18),
         ]))
         
         story.append(t)
@@ -145,7 +143,7 @@ if st.session_state.labels:
         st.download_button(
             label="📥 Stáhnout PDF se štítky",
             data=pdf_data,
-            file_name="stitky_konecna_verze.pdf",
+            file_name="stitky_kompletni.pdf",
             mime="application/pdf"
         )
 else:
