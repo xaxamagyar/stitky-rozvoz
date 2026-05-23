@@ -25,11 +25,11 @@ A4_SIZE = (595.27, 841.89)
 st.set_page_config(page_title="Generátor štítků", layout="wide")
 
 st.title("📦 Generátor balíkových štítků (A4 - 2x7)")
-st.write("Zadejte údaje, přidejte balíky do seznamu a následně vygenerujte PDF pro tisk.")
+st.write("Zadejte údaje, spravujte objednávky ve frontě a vygenerujte PDF pro tisk.")
 
-# Inicializace stavu aplikace (paměť pro uložené štítky a režim editace)
-if "labels" not in st.session_state:
-    st.session_state.labels = []
+# Inicializace paměti pro objednávky a režim editace
+if "orders" not in st.session_state:
+    st.session_state.orders = []
 if "edit_index" not in st.session_state:
     st.session_state.edit_index = None
 
@@ -37,20 +37,15 @@ if "edit_index" not in st.session_state:
 is_editing = st.session_state.edit_index is not None
 
 if is_editing:
-    st.subheader("✏️ Upravit štítek")
-    # Načtení stávajících hodnot pro editaci
+    st.subheader("✏️ Upravit skupinu balíků / objednávku")
     edit_idx = st.session_state.edit_index
-    current_label = st.session_state.labels[edit_idx]
-    default_name = current_label["name"]
-    default_order = current_label["order_num"]
-    default_note = current_label["note"]
-    # Zjistíme celkový počet ze stringu "BALÍK: X/Y"
-    try:
-        default_count = int(current_label["package_info"].split("/")[-1])
-    except:
-        default_count = 1
+    current_order = st.session_state.orders[edit_idx]
+    default_name = current_order["name"]
+    default_order = current_order["order_num"]
+    default_note = current_order["note"]
+    default_count = current_order["count"]
 else:
-    st.subheader("📝 Nový štítek")
+    st.subheader("📝 Nový štítek / skupina balíků")
     default_name = ""
     default_order = ""
     default_note = ""
@@ -63,36 +58,33 @@ with st.form("label_form", clear_on_submit=True):
         order_num = st.text_input("Číslo objednávky", value=default_order)
     with col2:
         note = st.text_area("Poznámka", value=default_note, max_chars=100)
-        # Počet balíků povolíme měnit jen při vytváření nového, u editace měníme konkrétní kus
-        count = st.number_input("Počet balíků (štítků)", min_value=1, value=default_count, step=1, disabled=is_editing)
+        count = st.number_input("Počet balíků (štítků) pro tuto objednávku", min_value=1, value=default_count, step=1)
     
-    if is_editing:
-        btn_label = "💾 Uložit změny"
-    else:
-        btn_label = "➕ Přidat do seznamu"
-        
+    btn_label = "💾 Uložit změny objednávky" if is_editing else "➕ Přidat do fronty"
     submit = st.form_submit_button(btn_label)
 
 if submit:
     if name or order_num:
         if is_editing:
-            # Aktualizace existujícího štítku
-            st.session_state.labels[st.session_state.edit_index]["name"] = name
-            st.session_state.labels[st.session_state.edit_index]["order_num"] = order_num
-            st.session_state.labels[st.session_state.edit_index]["note"] = note
-            st.session_state.edit_index = None  # Vypnout režim editace
-            st.success("Štítek byl úspěšně upraven.")
+            # Přepis celé objednávky včetně možnosti změnit počet balíků
+            st.session_state.orders[st.session_state.edit_index] = {
+                "name": name,
+                "order_num": order_num,
+                "note": note,
+                "count": count
+            }
+            st.session_state.edit_index = None
+            st.success("Objednávka byla úspěšně upravena.")
             st.rerun()
         else:
-            # Přidání nových štítků
-            for i in range(1, count + 1):
-                st.session_state.labels.append({
-                    "name": name,
-                    "order_num": order_num,
-                    "note": note,
-                    "package_info": f"BALÍK: {i}/{count}" if count > 1 else "BALÍK: 1/1"
-                })
-            st.success(f"Přidáno {count} štítků.")
+            # Uložení jako jedna ucelená objednávka
+            st.session_state.orders.append({
+                "name": name,
+                "order_num": order_num,
+                "note": note,
+                "count": count
+            })
+            st.success(f"Objednávka s {count} balíky byla přidána.")
             st.rerun()
     else:
         st.error("Vyplňte prosím aspoň jméno nebo číslo objednávky.")
@@ -102,32 +94,36 @@ if is_editing:
         st.session_state.edit_index = None
         st.rerun()
 
-# --- PŘEHLED ZADANÝCH ŠTÍTKŮ ---
-if st.session_state.labels:
-    st.subheader(f"📋 Seznam štítků k tisku ({len(st.session_state.labels)} ks)")
-    st.dataframe(st.session_state.labels, use_container_width=True)
+# --- PŘEHLED ZADANÝCH OBJEDNÁVEK ---
+if st.session_state.orders:
+    # Spočítáme celkový počet štítků napříč objednávkami
+    total_labels = sum(order["count"] for order in st.session_state.orders)
     
-    # --- SEKCE PRO UPRAVU A MAZÁNÍ PO KUSECH ---
-    st.write("**Správa jednotlivých štítků:**")
-    for idx, label in enumerate(st.session_state.labels):
+    st.subheader(f"📋 Seznam objednávek ve frontě (Celkem {total_labels} štítků k tisku)")
+    
+    # Zobrazení přehledné tabulky
+    st.dataframe(st.session_state.orders, use_container_width=True)
+    
+    # Ovládací prvky pro jednotlivé objednávky
+    st.write("**Správa objednávek:**")
+    for idx, order in enumerate(st.session_state.orders):
         col_text, col_edit, col_del = st.columns([6, 1, 1])
         with col_text:
-            st.text(f"{idx + 1}. {label['name']} | Obj: {label['order_num']} ({label['package_info']})")
+            st.text(f"{idx + 1}. {order['name']} | Obj: {order['order_num']} | Počet balíků: {order['count']} ks")
         with col_edit:
-            if st.button("✏️ Upravit", key=f"edit_{idx}"):
+            if st.button("✏️ Upravit vše", key=f"edit_{idx}"):
                 st.session_state.edit_index = idx
                 st.rerun()
         with col_del:
             if st.button("🗑️ Smazat", key=f"del_{idx}"):
-                st.session_state.labels.pop(idx)
-                # Pokud smazat upravovaný řádek, zrušíme editaci
+                st.session_state.orders.pop(idx)
                 if st.session_state.edit_index == idx:
                     st.session_state.edit_index = None
                 st.rerun()
 
     st.write("---")
-    if st.button("🗑️ Vymazat úplně celý seznam"):
-        st.session_state.labels = []
+    if st.button("🗑️ Vymazat úplně celou frontu"):
+        st.session_state.orders = []
         st.session_state.edit_index = None
         st.rerun()
 
@@ -160,23 +156,27 @@ if st.session_state.labels:
     grid_data = []
     current_row = []
     
-    for label in st.session_state.labels:
-        label_content = [
-            Paragraph(f"<b>Příjemce:</b> {label['name']}", style_name),
-            Spacer(1, 2),
-            Paragraph(f"<b>Objednávka:</b> {label['order_num']}", style_order),
-            Spacer(1, 2),
-            Paragraph(f"<b>Poznámka:</b> {label['note']}" if label['note'] else "", style_note),
-            Spacer(1, 4), 
-            Paragraph(label['package_info'], style_pkg)
-        ]
-        
-        current_row.append(label_content)
-        
-        if len(current_row) == 2:
-            grid_data.append(current_row)
-            current_row = []
+    # Rozbalení skupin na jednotlivé štítky až těsně před generováním PDF
+    for order in st.session_state.orders:
+        for i in range(1, order["count"] + 1):
+            pkg_info = f"BALÍK: {i}/{order['count']}" if order["count"] > 1 else "BALÍK: 1/1"
             
+            label_content = [
+                Paragraph(f"<b>Příjemce:</b> {order['name']}", style_name),
+                Spacer(1, 2),
+                Paragraph(f"<b>Objednávka:</b> {order['order_num']}", style_order),
+                Spacer(1, 2),
+                Paragraph(f"<b>Poznámka:</b> {order['note']}" if order['note'] else "", style_note),
+                Spacer(1, 4), 
+                Paragraph(pkg_info, style_pkg)
+            ]
+            
+            current_row.append(label_content)
+            
+            if len(current_row) == 2:
+                grid_data.append(current_row)
+                current_row = []
+                
     if current_row:
         current_row.append("")
         grid_data.append(current_row)
@@ -210,4 +210,4 @@ if st.session_state.labels:
             mime="application/pdf"
         )
 else:
-    st.info("Seznam je prázdný. Zadejte data výše.")
+    st.info("Fronta je prázdná. Zadejte novou objednávku výše.")
